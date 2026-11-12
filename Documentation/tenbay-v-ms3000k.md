@@ -1,6 +1,6 @@
-# Tenbay V-MS3000K OpenWrt support notes
+# BLUESOO/TENBAY V-MS3000K OpenWrt support notes
 
-R121 is a hardware-tested prototype for the Tenbay V-MS3000K access point. This branch records the evidence and the work needed for an upstream device-support pull request.
+R121 is a hardware-tested OpenWrt prototype for the BLUESOO/TENBAY V-MS3000K access point. This branch records the evidence and the work needed for an upstream device-support pull request.
 
 | Component | Observed on the test device |
 | --- | --- |
