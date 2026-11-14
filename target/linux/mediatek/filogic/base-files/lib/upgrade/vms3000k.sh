@@ -3,8 +3,8 @@
 if [ "$(board_name)" = tenbay,v-ms3000k ]; then
 	RAMFS_COPY_BIN="$RAMFS_COPY_BIN sha256sum head readlink mktemp tr ubiblock ubiupdatevol"
 fi
-VMS_KERNEL_BYTES=3174400
-VMS_ROOTFS_BYTES=4190208
+VMS_KERNEL_BYTES=8126464
+VMS_ROOTFS_BYTES=9142272
 
 vms_slot_ready() {
     local u=/sys/class/ubi/ubi0 m=/sys/class/mtd/mtd5 v
@@ -16,25 +16,25 @@ vms_slot_ready() {
     [ "$(cat "$m/size")" = 50331648 ] && [ "$(cat "$m/flags")" = 0x400 ] &&
     [ "$(cat /sys/class/mtd/mtd4/name)" = ubi ] && [ "$(cat /sys/class/mtd/mtd4/flags)" = 0x0 ] &&
     [ "$(cat "$m/ecc_failures")" = 0 ] && [ "$(cat "$u/bad_peb_count")" = 0 ] &&
-    [ "$(cat "${u}_0/name")" = kernel ] && [ "$(cat "${u}_0/reserved_ebs")" = 25 ] &&
-    [ "$(cat "${u}_1/name")" = rootfs ] && [ "$(cat "${u}_1/reserved_ebs")" = 33 ] &&
-    [ "$(cat "${u}_2/name")" = rootfs_data ] && [ "$(cat "${u}_2/reserved_ebs")" = 303 ] || return 1
+    [ "$(cat "${u}_0/name")" = kernel ] && [ "$(cat "${u}_0/reserved_ebs")" = 64 ] &&
+    [ "$(cat "${u}_1/name")" = rootfs ] && [ "$(cat "${u}_1/reserved_ebs")" = 72 ] &&
+    [ "$(cat "${u}_2/name")" = rootfs_data ] && [ "$(cat "${u}_2/reserved_ebs")" = 225 ] || return 1
     for v in 0 1 2; do
-        [ -c "/dev/ubi0_$v" ] && [ "$(cat "${u}_$v/usable_eb_size")" = 126976 ] &&
+        [ -c "/dev/ubi0_$v" ] && [ "$(cat "${u}_$v/type")" = dynamic ] && [ "$(cat "${u}_$v/usable_eb_size")" = 126976 ] &&
         [ "$(cat "${u}_$v/upd_marker")$(cat "${u}_$v/corrupted")" = 00 ] || return 1
     done
 }
 
 vms_unpack() {
     local image="$1" dir="$2" listing
-    [ -f "$image" ] && [ "$(wc -c < "$image")" -le 7500000 ] || return 1
+    [ -f "$image" ] && [ "$(wc -c < "$image")" -le 17300000 ] || return 1
     listing="$(tar tf "$image")" || return 1
     [ "$listing" = "format
 kernel
 rootfs
 sha256" ] || return 1
     tar xOf "$image" format > "$dir/format" &&
-    [ "$(cat "$dir/format")" = 'tenbay,v-ms3000k:ubi1:v1' ] &&
+    [ "$(cat "$dir/format")" = 'tenbay,v-ms3000k:ubi1:v2' ] &&
     tar xOf "$image" kernel > "$dir/kernel" && tar xOf "$image" rootfs > "$dir/rootfs" &&
     tar xOf "$image" sha256 > "$dir/sha256" || return 1
     [ "$(wc -c < "$dir/kernel")" -le "$VMS_KERNEL_BYTES" ] &&
@@ -49,8 +49,12 @@ vms_check_image() {
     local dir rc=0
     [ "${SAVE_CONFIG:-1}" = 1 ] && [ "${FORCE:-0}" = 0 ] &&
         [ "${FWTOOL_DEVICE_MATCH:-1}" = 0 ] || return 74
-    vms_slot_ready && grep -q ' /overlay ubifs rw' /proc/mounts &&
-        grep -qx 'tenbay,v-ms3000k:ubi1:v1' /overlay/.vms-openwrt-overlay || return 74
+    vms_slot_ready || {
+        echo "V-MS3000K requires the 64/72/225-LEB ubi1 layout. Migrate from RAM before upgrading." >&2
+        return 74
+    }
+    grep -q ' /overlay ubifs rw' /proc/mounts &&
+        grep -qx 'tenbay,v-ms3000k:ubi1:v2' /overlay/.vms-openwrt-overlay || return 74
     dir="$(mktemp -d /tmp/vms-check.XXXXXX)" || return 74
     vms_unpack "$1" "$dir" || rc=74
     rm -r "$dir"
@@ -67,6 +71,25 @@ vms_write_volume() {
         vms_slot_ready
 }
 
+# fstools moves the archive to the overlay upper directory at boot.
+vms_save_config() {
+    local volume="$1" backup="$2" mountpoint status=1
+    mountpoint="$(mktemp -d /tmp/vms-config.XXXXXX)" || return 1
+    if mount -t ubifs "$volume" "$mountpoint"; then
+        if grep -qx 'tenbay,v-ms3000k:ubi1:v2' "$mountpoint/.vms-openwrt-overlay" &&
+            [ "$(readlink "$mountpoint/.fs_state")" = 2 ] &&
+            [ ! -e "$mountpoint/sysupgrade.tgz" ] &&
+            cp "$backup" "$mountpoint/sysupgrade.tgz.new" &&
+            [ "$(sha256sum < "$backup")" = "$(sha256sum < "$mountpoint/sysupgrade.tgz.new")" ] &&
+            mv "$mountpoint/sysupgrade.tgz.new" "$mountpoint/sysupgrade.tgz" && sync; then
+            status=0
+        fi
+        umount "$mountpoint" || return 1
+    fi
+    rmdir "$mountpoint"
+    return "$status"
+}
+
 vms_write_upgrade() {
     local dir
     [ -n "$UPGRADE_BACKUP" ] && [ -f "$UPGRADE_BACKUP" ] || return 1
@@ -80,7 +103,8 @@ vms_write_upgrade() {
     fi
     [ ! -e /sys/class/block/ubiblock0_1 ] || return 1
     vms_write_volume /dev/ubi0_1 "$dir/rootfs" "$VMS_ROOTFS_BYTES" "$dir/readback" &&
-        vms_write_volume /dev/ubi0_0 "$dir/kernel" "$VMS_KERNEL_BYTES" "$dir/readback" && sync
+        vms_write_volume /dev/ubi0_0 "$dir/kernel" "$VMS_KERNEL_BYTES" "$dir/readback" &&
+        vms_save_config /dev/ubi0_2 "$UPGRADE_BACKUP" && sync
 }
 
 vms_do_upgrade() {

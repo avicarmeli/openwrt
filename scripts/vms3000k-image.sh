@@ -3,8 +3,8 @@ set -eu
 kernel=$1
 rootfs=$2
 output=$3
-test "$(wc -c < "$kernel")" -le 3174400 || { echo "V-MS3000K kernel exceeds 25 LEBs" >&2; exit 1; }
-test "$(wc -c < "$rootfs")" -le 4190208 || { echo "V-MS3000K rootfs exceeds 33 LEBs" >&2; exit 1; }
+test "$(wc -c < "$kernel")" -le 8126464 || { echo "V-MS3000K kernel exceeds 64 LEBs" >&2; exit 1; }
+test "$(wc -c < "$rootfs")" -le 9142272 || { echo "V-MS3000K rootfs exceeds 72 LEBs" >&2; exit 1; }
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
 dtc=${4:?missing host dtc}
@@ -22,9 +22,9 @@ cat >> "$work/kernel.dts" <<EOF
 };
 EOF
 "$dtc" -q -I dts -O dtb -o "$work/kernel" "$work/kernel.dts"
-test "$(wc -c < "$work/kernel")" -le 3174400
+test "$(wc -c < "$work/kernel")" -le 8126464
 cp "$rootfs" "$work/rootfs"
-printf '%s\n' tenbay,v-ms3000k:ubi1:v1 > "$work/format"
+printf '%s\n' tenbay,v-ms3000k:ubi1:v2 > "$work/format"
 (cd "$work" && sha256sum kernel rootfs > sha256)
 tar --format=ustar --numeric-owner --owner=0 --group=0 --mtime="@${SOURCE_DATE_EPOCH:-0}" \
     -cf "$output" -C "$work" format kernel rootfs sha256
