@@ -1,6 +1,8 @@
 #!/bin/sh
 
-RAMFS_COPY_BIN="$RAMFS_COPY_BIN sha256sum head readlink mktemp tr ubiblock ubiupdatevol"
+if [ "$(board_name)" = tenbay,v-ms3000k ]; then
+	RAMFS_COPY_BIN="$RAMFS_COPY_BIN sha256sum head readlink mktemp tr ubiblock ubiupdatevol"
+fi
 VMS_KERNEL_BYTES=3174400
 VMS_ROOTFS_BYTES=4190208
 
@@ -65,7 +67,7 @@ vms_write_volume() {
         vms_slot_ready
 }
 
-vms_do_upgrade() {
+vms_write_upgrade() {
     local dir
     [ -n "$UPGRADE_BACKUP" ] && [ -f "$UPGRADE_BACKUP" ] || return 1
     [ "$(rootfs_type)" = tmpfs ] || return 1
@@ -79,4 +81,10 @@ vms_do_upgrade() {
     [ ! -e /sys/class/block/ubiblock0_1 ] || return 1
     vms_write_volume /dev/ubi0_1 "$dir/rootfs" "$VMS_ROOTFS_BYTES" "$dir/readback" &&
         vms_write_volume /dev/ubi0_0 "$dir/kernel" "$VMS_KERNEL_BYTES" "$dir/readback" && sync
+}
+
+vms_do_upgrade() {
+	vms_write_upgrade "$1" && return 0
+	v "V-MS3000K upgrade stopped. Inspect UART before rebooting."
+	while :; do sleep 60; done
 }

@@ -7,11 +7,6 @@ include /lib/upgrade
 v "Performing system upgrade..."
 if type 'platform_do_upgrade' >/dev/null 2>/dev/null; then
 	platform_do_upgrade "$IMAGE"
-	upgrade_status=$?
-	if [ "$upgrade_status" -ne 0 ] && [ "$(cat /tmp/sysinfo/board_name)" = tenbay,v-ms3000k ]; then
-		v "V-MS3000K upgrade stopped. Inspect UART before rebooting."
-		while :; do sleep 60; done
-	fi
 else
 	default_do_upgrade "$IMAGE"
 fi
