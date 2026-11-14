@@ -7,16 +7,21 @@ test "$(wc -c < "$kernel")" -le 3174400 || { echo "V-MS3000K kernel exceeds 25 L
 test "$(wc -c < "$rootfs")" -le 4190208 || { echo "V-MS3000K rootfs exceeds 33 LEBs" >&2; exit 1; }
 work=$(mktemp -d)
 trap 'rm -rf "$work"' EXIT
-cp "$kernel" "$work/kernel"
-fdtput=${4:?missing host fdtput}
+dtc=${4:?missing host dtc}
 size=$(wc -c < "$rootfs")
-"$fdtput" -p -t x "$work/kernel" /rootfs size "$(printf '%x' "$size")"
-"$fdtput" -p -t s "$work/kernel" /rootfs/hash-1 algo crc32
-"$fdtput" -p -t x "$work/kernel" /rootfs/hash-1 value "$(python3 -c 'import pathlib,sys,zlib; print(format(zlib.crc32(pathlib.Path(sys.argv[1]).read_bytes()), "08x"))' "$rootfs")"
-"$fdtput" -p -t s "$work/kernel" /rootfs/hash-2 algo sha1
-digest=$(sha1sum "$rootfs" | cut -d " " -f 1)
-# fdtput expects one numeric argument per 32-bit cell.
-"$fdtput" -p -t x "$work/kernel" /rootfs/hash-2 value $(echo "$digest" | sed 's/\(........\)/\1 /g')
+crc=$(python3 -c 'import pathlib,sys,zlib; print(hex(zlib.crc32(pathlib.Path(sys.argv[1]).read_bytes())))' "$rootfs")
+digest=$(sha1sum "$rootfs" | cut -d " " -f 1 | sed 's/\(........\)/0x\1 /g')
+"$dtc" -q -I dtb -O dts -o "$work/kernel.dts" "$kernel"
+cat >> "$work/kernel.dts" <<EOF
+/ {
+	rootfs {
+		size = <$size>;
+		hash-1 { algo = "crc32"; value = <$crc>; };
+		hash-2 { algo = "sha1"; value = <$digest>; };
+	};
+};
+EOF
+"$dtc" -q -I dts -O dtb -o "$work/kernel" "$work/kernel.dts"
 test "$(wc -c < "$work/kernel")" -le 3174400
 cp "$rootfs" "$work/rootfs"
 printf '%s\n' tenbay,v-ms3000k:ubi1:v1 > "$work/format"

@@ -3671,7 +3671,7 @@ endef
 TARGET_DEVICES += teltonika_rutc50
 
 define Build/vms3000k-tar
-	sh $(TOPDIR)/scripts/vms3000k-image.sh $(IMAGE_KERNEL) $(IMAGE_ROOTFS) $@ $(STAGING_DIR_HOST)/bin/fdtput
+	sh $(TOPDIR)/scripts/vms3000k-image.sh $(IMAGE_KERNEL) $(IMAGE_ROOTFS) $@ $(LINUX_DIR)/scripts/dtc/dtc
 endef
 
 define Device/tenbay_v-ms3000k
