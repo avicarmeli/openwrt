@@ -8,6 +8,9 @@ mediatek_setup_interfaces()
 	local board="$1"
 
 	case $board in
+	tenbay,v-ms3000k)
+		ucidef_set_interfaces_lan_wan eth1 eth0
+		;;
 	abt,asr3000|\
 	buffalo,wsr-6000ax8|\
 	h3c,magic-nx30-pro|\
